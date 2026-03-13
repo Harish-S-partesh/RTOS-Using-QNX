@@ -1,81 +1,68 @@
-# EXPERIMENT-402
+# Experiment: Repeating Timer using Pulse Messages in QNX
 
-## Experiment Title
-**Repeating Timer Using Pulses in QNX (Momentics IDE)**
+## Aim
+
+To implement a **repeating timer in QNX** that periodically wakes a thread by sending **pulse messages**.
 
 ---
 
-## Aim/Objective
-To implement a periodic timer in QNX that generates pulse notifications using a kernel timer and to handle these pulses using `MsgReceive()`.
+## Objective
+
+* To understand **timer creation in QNX** using `timer_create()`.
+* To learn how **pulse events are generated using SIGEV_PULSE_INIT()`.
+* To demonstrate **periodic task execution using a repeating timer**.
 
 ---
 
 ## Problem Statement
-In this project, a skeleton source file named `reptimer.c` is provided.
 
-Learners must complete the missing code to create and start a repeating timer.
+Develop a QNX program that creates a **repeating timer**.
+When the timer expires, it sends a **pulse message to a channel**.
+The program waits in a `MsgReceive()` loop and processes the pulse whenever the timer expires.
 
-The completed program must:
+The timer should:
 
-* Create a kernel timer.
-* Configure the timer to send a pulse event.
-* Generate the first pulse **5 seconds after program start**.
-* Continue generating pulses **every 1500 milliseconds (1.5 seconds)**.
-* Receive the pulse using `MsgReceive()` and display a message each time the timer expires.
+* Trigger the **first event after 5 seconds**.
+* Then **repeat every 1.5 seconds**.
 
 ---
 
-## Tasks to be Performed / Algorithm
-1. Open the **time** project in QNX Momentics IDE.
-2. Locate and open the skeleton file `reptimer.c`.
-3. Search for comments or `TODO` markers indicating incomplete sections.
-4. Add code to:
+# Algorithm
 
-   * create a timer using the appropriate QNX timer API
-   * configure the timer to deliver the already initialized pulse event
-   * set the initial expiry time to **5 seconds**
-   * configure the timer interval to **1500 milliseconds**
-   * start the timer
-5. Ensure the program waits for pulse messages using `MsgReceive()` inside the main loop.
-6. Print a message whenever the timer pulse is received.
-7. Build the project in Momentics.
-8. Run the program and observe periodic pulse notifications.
-9. Record observations (time of first pulse and interval between subsequent pulses).
+1. Start the program.
+2. Declare variables for:
+
+   * Channel ID
+   * Connection ID
+   * Timer ID
+   * Timer specification
+   * Message structure for pulses.
+3. Create a **channel using `ChannelCreate()`**.
+4. Attach a **connection to the channel using `ConnectAttach()`**.
+5. Initialize a **pulse event using `SIGEV_PULSE_INIT()`**.
+6. Create a **timer using `timer_create()`**.
+7. Configure the timer using `itimerspec`:
+
+   * Set first expiry to **5 seconds**.
+   * Set repeating interval to **1.5 seconds**.
+8. Start the timer using `timer_settime()`.
+9. Enter an infinite loop.
+10. Wait for incoming messages using `MsgReceive()`.
+11. If a pulse message is received:
+
+    * Check the pulse code.
+12. If the pulse code matches the timer event:
+
+    * Print **"Timer expired – pulse received"**.
+13. Continue waiting for the next timer pulse.
 
 ---
 
-## Build / Run / Test Steps
+# Program
 
-1. Right-click the application binary → **Run As → QNX C/C++ Application**.
-2. Execute the program: `reptimer`
-3. Verify that:
-
-   * The first message appears **approximately 5 seconds** after execution.
-   * Subsequent messages appear **every 1.5 seconds**.
-   * Each timer expiry results in a pulse being received and a console message being printed.
-
----
-#### reptimer.c
-```c
+```c id="rtm0pf"
 /*
  * reptimer.c
- * 
- * This program demonstrates how to use a repeating timer to wake up
- * a thread periodically.  In this case we will wake up by receiving
- * a pulse message whenever the timer expires.
- * 
- * This example uses a simple MsgReceive() loop.  It could also have been
- * written as a resource manager, the only difference being the way in 
- * which the pulse would be received.  The set up for the timer is the same.
- * An example of where you might use a timer with a simple MsgReceive()
- * loop like this is in a driver, where the hardware handling driver
- * thread needs to wake up periodically as well as handle interrupts.
- * 
- * You need to add the code to create the timer and start it ticking.
- *
- *  To test it, run it as follows:
- *    reptimer
- *
  */
 
 #include <stdlib.h>
@@ -90,90 +77,103 @@ The completed program must:
 
 #define TIMER_PULSE_EVENT (_PULSE_CODE_MINAVAIL + 7)
 
-/* union of all different types of message(s) we will receive (for this
- * exercise we will only be receiving pulses)
- */
 typedef union
 {
-	struct _pulse pulse;
+    struct _pulse pulse;
 } message_t;
 
 int main(int argc, char *argv[])
 {
-	rcvid_t rcvid;
-	struct sigevent event;
-	int chid, coid;
-	message_t msg;
+    rcvid_t rcvid;
+    struct sigevent event;
+    int chid, coid;
+    message_t msg;
+    timer_t timerid;
+    struct itimerspec it;
 
-	chid = ChannelCreate(_NTO_CHF_PRIVATE);
-	if (chid == -1)
-	{
-		fprintf(stderr, "ChannelCreate failed: %s\n", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+    chid = ChannelCreate(_NTO_CHF_PRIVATE);
+    if (chid == -1)
+    {
+        fprintf(stderr, "ChannelCreate failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-	/* set up the pulse event that will be delivered to us by the kernel
-	 * whenever the timer expires
-	 */
-	coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
-	if (coid == -1)
-	{
-		fprintf(stderr, "ConnectAttach failed: %s\n", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-	SIGEV_PULSE_INIT( &event, coid, 10, TIMER_PULSE_EVENT, 0 );
+    coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
+    if (coid == -1)
+    {
+        fprintf(stderr, "ConnectAttach failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-	/* TODO: Create a timer which will send the above pulse event
-	 * 5 seconds from now and then repeatedly after that every
-	 * 1500 milliseconds.  The event to use has already been filled in
-	 * above and is in the variable called 'event'.
-	 */
+    SIGEV_PULSE_INIT(&event, coid, 10, TIMER_PULSE_EVENT, 0);
 
-	while (1)
-	{
-		/* wait here for the pulse message */
-		rcvid = MsgReceive(chid, &msg, sizeof(msg), NULL );
-		if (rcvid == -1)
-		{
-			fprintf(stderr, "MsgReceive failed: %s\n", strerror(errno));
-			continue;
-		}
-		if (rcvid == 0)
-		{
-			/* we got a pulse */
-			switch (msg.pulse.code)
-			{
-			case TIMER_PULSE_EVENT:
-				/* we got our timer pulse */
-				printf("got our pulse, the timer must have expired\n");
-				break;
-			default:
-				printf("unexpected pulse code: %d\n", msg.pulse.code);
-				break;
-			}
-		}
-	}
+    if (timer_create(CLOCK_MONOTONIC, &event, &timerid) == -1)
+    {
+        perror("timer_create");
+        exit(EXIT_FAILURE);
+    }
+
+    it.it_value.tv_sec = 5;
+    it.it_value.tv_nsec = 0;
+
+    it.it_interval.tv_sec = 1;
+    it.it_interval.tv_nsec = 500 * 1000 * 1000;
+
+    if (timer_settime(timerid, 0, &it, NULL) == -1)
+    {
+        perror("timer_settime");
+        exit(EXIT_FAILURE);
+    }
+
+    while (1)
+    {
+        rcvid = MsgReceive(chid, &msg, sizeof(msg), NULL);
+
+        if (rcvid == -1)
+        {
+            fprintf(stderr, "MsgReceive failed: %s\n", strerror(errno));
+            continue;
+        }
+
+        if (rcvid == 0)
+        {
+            switch (msg.pulse.code)
+            {
+                case TIMER_PULSE_EVENT:
+                    printf("got our pulse, the timer must have expired\n");
+                    break;
+
+                default:
+                    printf("unexpected pulse code: %d\n", msg.pulse.code);
+                    break;
+            }
+        }
+    }
 }
 ```
----
-
-## Expected Outcome
-
-* The program successfully creates and starts a periodic timer.
-* The timer sends pulse notifications to the process.
-* `MsgReceive()` unblocks whenever the timer expires.
-* Console output confirms periodic execution at the configured intervals.
 
 ---
 
-## Program
+# Expected Output
+
+```text id="aq8s4n"
+got our pulse, the timer must have expired
+got our pulse, the timer must have expired
+got our pulse, the timer must have expired
+got our pulse, the timer must have expired
+...
+```
+
+*(The message appears every 1.5 seconds after the initial 5-second delay.)*
 
 ---
 
-## Output
+# Output
+
 
 ---
 
-## Result
+# Result
 
----
+Thus, a **repeating timer using pulse messages in QNX** was successfully implemented.
+The timer periodically generated pulses that were received through the **MsgReceive() loop**, demonstrating **periodic task execution in QNX**.
