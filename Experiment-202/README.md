@@ -28,6 +28,7 @@ State 1 → State 3 (if internal variable is odd)
 State 2 → State 0
 State 3 → State 0
 ```
+![tranistion](qn.png)
 
 Each state is handled by a **separate thread**, and threads synchronize using **mutex locks and condition variables**.
 
@@ -249,6 +250,7 @@ main, exiting
 ---
 
 # Output
+<img width="1895" height="944" alt="Screenshot 2026-03-13 112251" src="https://github.com/user-attachments/assets/d696e72a-920c-4cf0-8f36-a91c8cdcfc82" />
 
 ---
 
